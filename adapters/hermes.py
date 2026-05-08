@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import sqlite3
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 from adapters.base import Adapter, bound_response, estimate_tokens, format_brief
@@ -91,6 +91,7 @@ class HermesAdapter(Adapter):
             command.extend(["--resume", session.adapter_handle])
         # Hermes uses -q for non-interactive query mode.
         command.extend(["-q", prompt])
+        proc: asyncio.Process | None = None
         try:
             proc = await asyncio.create_subprocess_exec(
                 *command,
@@ -102,8 +103,8 @@ class HermesAdapter(Adapter):
                 proc.communicate(),
                 timeout=timeout_s,
             )
-        except TimeoutError:
-            if "proc" in locals():
+        except asyncio.TimeoutError:
+            if proc is not None:
                 proc.kill()
                 await proc.wait()
             yield ConsultChunk(
