@@ -13,6 +13,7 @@ from bridge.protocol import (
     Brief,
     Capability,
     ConsultChunk,
+    HealthStatus,
     Session,
     TargetStatus,
     Urgency,
@@ -38,7 +39,7 @@ class OpenClawAdapter(Adapter):
         )
         self._client = httpx.AsyncClient()
 
-    async def health(self) -> TargetStatus:
+    async def health(self) -> HealthStatus:
         """Probe the MCP endpoint."""
         try:
             await self._client.post(
@@ -46,9 +47,12 @@ class OpenClawAdapter(Adapter):
                 json=self._rpc("tools/list", {}),
                 timeout=2.0,
             )
-        except httpx.HTTPError:
-            return TargetStatus.UNREACHABLE
-        return TargetStatus.READY
+        except httpx.HTTPError as exc:
+            return HealthStatus(
+                status=TargetStatus.UNREACHABLE,
+                error_message=str(exc),
+            )
+        return HealthStatus(status=TargetStatus.READY)
 
     async def consult(
         self,

@@ -1,10 +1,17 @@
-"""Protocol models for Agent Bridge MCP (v2.1).
+"""Protocol models for Agent Bridge MCP (v3).
 
 All cross-component types live here. Adapters, the server, the audit log,
-and the session store all import from this module — nothing in here
-imports from the rest of the bridge, so it's safe to import from anywhere.
+the registry, and the session store all import from this module — nothing
+in here imports from the rest of the bridge, so it's safe to import from
+anywhere.
 
 Pydantic v2.
+
+Changes from v2.1:
+  - HealthStatus model (replaces bare TargetStatus return type from health())
+  - Target gains last_checked_at and latency_ms
+  - Adapter ABC defined here (was implied / scattered before)
+  - AuditEntry.streamed boolean
 
 Changes from v2:
   - TokenCount typed model (value + method)
@@ -20,9 +27,10 @@ Changes from v2:
 from __future__ import annotations
 
 import hashlib
+from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Literal, Optional
+from typing import AsyncIterator, Literal, Optional
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -260,17 +268,55 @@ class Brief(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Targets and capabilities (returned by list_targets)
+# Health and targets (returned by list_targets)
 # ---------------------------------------------------------------------------
 
 
+class HealthStatus(BaseModel):
+    """Result of a single Adapter.health() check.
+
+    Returned by adapters; consumed by the registry's state machine. The
+    registry caches the most recent HealthStatus per target and derives
+    the user-facing Target view from it.
+
+    Adapters fill in status, error_message (on failure), and optionally
+    latency_ms. The registry fills in checked_at if the adapter doesn't
+    set it, and maintains the consecutive_* streak counters across calls.
+    """
+
+    status: TargetStatus
+    checked_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    latency_ms: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description="How long the health check itself took, in ms.",
+    )
+    error_message: Optional[str] = Field(
+        default=None,
+        max_length=2_000,
+        description="Populated for DEGRADED/UNREACHABLE; surfaced as Target.note.",
+    )
+    consecutive_healthy: int = Field(default=0, ge=0)
+    consecutive_unhealthy: int = Field(default=0, ge=0)
+
+
 class Target(BaseModel):
+    """User-facing view of a registered target. Returned by list_targets.
+
+    Built by the registry from the latest HealthStatus + the adapter's
+    declared identity. last_checked_at and latency_ms are populated from
+    HealthStatus; status reflects the most recent check (or the cached
+    value if within the lazy-cache TTL).
+    """
+
     id: str
     model: str
     kind: AdapterKind
     status: TargetStatus
     capabilities: list[Capability] = Field(default_factory=list)
     note: Optional[str] = None
+    last_checked_at: Optional[datetime] = None
+    latency_ms: Optional[int] = Field(default=None, ge=0)
 
 
 # ---------------------------------------------------------------------------
@@ -389,6 +435,7 @@ class AuditEntry(BaseModel):
     tokens_out: TokenCount = Field(default_factory=TokenCount.unknown)
     outcome: Outcome
     truncated: bool = False
+    streamed: bool = False
     error_message: Optional[str] = None
 
     def to_jsonl(self) -> str:
@@ -431,6 +478,94 @@ class GetAuditRequest(BaseModel):
     since: Optional[datetime] = None
 
 
+# ---------------------------------------------------------------------------
+# Adapter ABC
+# ---------------------------------------------------------------------------
+
+
+class Adapter(ABC):
+    """Abstract base class every concrete adapter inherits from.
+
+    Subclasses set the four class-level identity attributes (id, model,
+    kind, capabilities) and implement the four async methods. The
+    registry validates capability/kind consistency at registration via
+    validate_capabilities(); inconsistent declarations crash the bridge
+    at startup rather than serving lies via list_targets.
+
+    Streaming contract: consult() is an async generator. It yields zero
+    or more ConsultChunk(type='text') chunks, followed by exactly one
+    ConsultChunk(type='done') OR ConsultChunk(type='error'). Adapters
+    without streaming support yield a single text chunk + done — the
+    server's streaming wrapper handles this case transparently, so
+    non-streaming adapters don't need special-casing.
+
+    Session contract: depends on the SESSIONS_* capability declared.
+      - SESSIONS_NATIVE: open_session/close_session manage state in the
+        underlying harness; consult() passes session.adapter_handle to
+        the harness; Session.history is left empty (the registry knows
+        not to populate it).
+      - SESSIONS_REPLAY: open_session creates an empty Session; the
+        bridge appends to Session.history after each turn; consult()
+        prepends history to the brief at call time.
+      - SESSIONS_NONE: open_session must raise NotImplementedError;
+        consult() with session=not None must also raise. The server
+        degrades urgency=deep to quick with a warning before reaching
+        the adapter.
+
+    Lifecycle: instances are created at server startup, registered with
+    the registry, and live until shutdown. Adapters should be safe to
+    have multiple consult() calls in flight concurrently up to the
+    target's max_concurrent semaphore (enforced by the registry).
+    """
+
+    id: str
+    model: str
+    kind: AdapterKind
+    capabilities: frozenset[Capability]
+
+    @abstractmethod
+    async def health(self) -> HealthStatus:
+        """Cheap liveness probe. Must complete within the configured
+        check_timeout_seconds. Should not consume real consult quota
+        (no LLM calls). Errors should be caught and returned as
+        HealthStatus(status=UNREACHABLE, error_message=...) rather than
+        raising — the registry catches exceptions defensively, but
+        adapters should produce structured results when possible.
+        """
+
+    @abstractmethod
+    def consult(
+        self,
+        brief: "Brief",
+        urgency: Urgency,
+        session: Optional["Session"],
+        timeout_s: int,
+        max_response_bytes: int,
+    ) -> AsyncIterator[ConsultChunk]:
+        """Run a consultation, yielding chunks as they arrive.
+
+        Adapter is responsible for enforcing timeout_s and
+        max_response_bytes at the protocol level it owns (subprocess
+        kill, HTTP timeout, etc.). The server wraps the call in
+        asyncio.wait_for as a backstop, but adapters that respect
+        these themselves produce cleaner errors and partial results.
+
+        On truncation: stop yielding text, emit a final text chunk
+        containing '\\n[truncated: N bytes omitted]', then done with
+        truncated=True.
+        """
+
+    @abstractmethod
+    async def open_session(self, purpose: str) -> "Session":
+        """Create a new persistent session. Implementation depends on
+        SESSIONS_* capability — see class docstring."""
+
+    @abstractmethod
+    async def close_session(self, session: "Session") -> None:
+        """Release any harness-side resources for the session. Idempotent.
+        Bridge may call this on TTL expiry, explicit close, or shutdown."""
+
+
 __all__ = [
     # Limits
     "MAX_ATTACHMENT_BYTES",
@@ -451,6 +586,7 @@ __all__ = [
     "TokenCount",
     "Attachment",
     "Brief",
+    "HealthStatus",
     "Target",
     "Turn",
     "Session",
@@ -463,4 +599,6 @@ __all__ = [
     "OpenSessionResult",
     "CloseSessionResult",
     "GetAuditRequest",
+    # ABC
+    "Adapter",
 ]

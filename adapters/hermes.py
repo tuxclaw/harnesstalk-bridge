@@ -13,6 +13,7 @@ from bridge.protocol import (
     Brief,
     Capability,
     ConsultChunk,
+    HealthStatus,
     Session,
     TargetStatus,
     Urgency,
@@ -61,13 +62,19 @@ class HermesAdapter(Adapter):
             caps.add(Capability.STRONG_MODEL)
         self.capabilities = frozenset(caps)
 
-    async def health(self) -> TargetStatus:
+    async def health(self) -> HealthStatus:
         """Return ready when cwd and Hermes SQLite schema are usable."""
         if self.cwd and not Path(self.cwd).exists():
-            return TargetStatus.UNREACHABLE
+            return HealthStatus(
+                status=TargetStatus.UNREACHABLE,
+                error_message=f"cwd does not exist: {self.cwd}",
+            )
         if self._schema_error:
-            return TargetStatus.DEGRADED
-        return TargetStatus.READY
+            return HealthStatus(
+                status=TargetStatus.DEGRADED,
+                error_message=self._schema_error,
+            )
+        return HealthStatus(status=TargetStatus.READY)
 
     async def consult(
         self,

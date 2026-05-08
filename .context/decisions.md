@@ -52,3 +52,13 @@
 **Decision:** Use Path A (read SQLite). DB path = `~/.hermes/state.db`. Query `sessions` table ordered by `started_at DESC LIMIT 1` after spawn to capture session id. Set `HERMES_DB_PATH` constant with schema-version check at init.
 **Tests required:** 3 tests per spec (capability validation, single-turn parity, multi-turn token regression).
 **Status:** Active
+
+## [2026-05-08] v3 Upgrade — Streaming and Health Integration
+**By:** Helen
+**Context:** v3 protocol.py and registry.py were already copied in; all consumers needed to move to the new `HealthStatus`, `TargetLimits`, async `list_targets`, and adapter async-iterator consult contract.
+**Decisions:**
+- Kept `adapters.base.Adapter` as a compatibility re-export of `bridge.protocol.Adapter` so older imports still work while protocol remains the source of truth.
+- `bridge.streaming.stream_consult()` wraps every adapter consult and only emits progress when a progress token is provided; non-streaming callers use the same accumulation path.
+- Server now uses registry accessors (`get_adapter`, `get_limits`, `get_semaphore`) instead of private target entries.
+- Claude API sessions remain in-memory and keyed by the bridge session's `adapter_handle` when available, so server-created session ids can map back to adapter-owned conversation arrays.
+**Status:** Active

@@ -1,5 +1,5 @@
 """Adapter implementations for Agent Bridge."""
 
-from adapters.base import Adapter, AdapterKind, ConsultChunk
+from bridge.protocol import Adapter, AdapterKind, ConsultChunk
 
 __all__ = ["Adapter", "AdapterKind", "ConsultChunk"]

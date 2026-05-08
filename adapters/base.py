@@ -1,66 +1,8 @@
-"""Adapter base classes and shared helpers."""
+"""Adapter compatibility imports and shared helpers."""
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator
-
-from bridge.protocol import (
-    AdapterKind,
-    Brief,
-    Capability,
-    ConsultChunk,
-    Session,
-    TargetStatus,
-    TokenCount,
-    Urgency,
-)
-
-
-class Adapter(ABC):
-    """Abstract interface implemented by all consultation targets."""
-
-    id: str
-    model: str
-    kind: AdapterKind
-    capabilities: frozenset[Capability]
-
-    @abstractmethod
-    async def health(self) -> TargetStatus:
-        """Return current target availability."""
-
-    @abstractmethod
-    async def consult(
-        self,
-        brief: Brief,
-        urgency: Urgency,
-        session: Session | None,
-        timeout_s: int,
-        max_response_bytes: int,
-    ) -> AsyncIterator[ConsultChunk]:
-        """Send a brief to the target.
-
-        Args:
-            brief: Structured consultation request.
-            urgency: Requested urgency level.
-            session: Existing bridge session, if any.
-            timeout_s: Adapter-level timeout in seconds.
-            max_response_bytes: Maximum response bytes to return.
-
-        Yields:
-            Text chunks followed by a done chunk, or one error chunk.
-        """
-
-    @abstractmethod
-    async def open_session(self, purpose: str) -> Session:
-        """Open a target-backed session where supported."""
-
-    @abstractmethod
-    async def close_session(self, session: Session) -> None:
-        """Close target-backed session resources where supported."""
-
-    async def close(self) -> None:
-        """Close adapter-level resources, such as pooled HTTP clients."""
+from bridge.protocol import Adapter, Brief, TokenCount
 
 
 def estimate_tokens(text: str) -> TokenCount:
@@ -82,12 +24,9 @@ def format_brief(brief: Brief) -> str:
         lines.append("")
         lines.append("Attachments:")
         for attachment in brief.attachments:
-            language = (
-                f" ({attachment.language})" if attachment.language else ""
-            )
+            language = f" ({attachment.language})" if attachment.language else ""
             lines.append(
-                f"--- {attachment.kind.value}: "
-                f"{attachment.label}{language}"
+                f"--- {attachment.kind.value}: {attachment.label}{language}"
             )
             lines.append(attachment.content)
     return "\n".join(lines)

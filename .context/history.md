@@ -17,3 +17,9 @@
 **Branch:** andy/hermes-sessions-native
 **Changes:** Flipped Hermes adapter from `SESSIONS_REPLAY` to `SESSIONS_NATIVE`; added read-only SQLite schema validation for `~/.hermes/state.db`; `open_session` now spawns `hermes chat -q <purpose> --quiet` and captures the newest native session id; `consult` resumes via `--resume <session_id>` without replay history; close marks bridge session closed only.
 **Tests:** Added Hermes native-session coverage for CLI_SUBPROCESS capability validation, no-replay consult parity, and multi-turn prompt-size regression.
+
+## [2026-05-08] v3 Upgrade
+**Agent:** Helen
+**Branch:** andy/v3-upgrade
+**Changes:** Updated consumers for v3 protocol/registry APIs; fixed bridge exports; updated Hermes/OpenClaw health to return `HealthStatus`; rewrote Claude API adapter for direct Anthropic streaming, exact token accounting, in-memory sessions, health probing, truncation, and blocker strong-model routing; added `bridge/streaming.py`; rewired server consult/list_targets/build paths to v3 registry and streaming wrapper; added `[server.health]` config parsing and config examples.
+**Tests:** Added v3 health state-machine, Claude API adapter, and streaming wrapper coverage. `python -m pytest tests/ -q` — 33 passed.

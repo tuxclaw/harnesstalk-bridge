@@ -13,13 +13,14 @@ from bridge.protocol import (
     Brief,
     Capability,
     ConsultChunk,
+    HealthStatus,
     Outcome,
     Session,
     TargetStatus,
     TokenCount,
     Urgency,
 )
-from bridge.registry import Registry
+from bridge.registry import Registry, TargetLimits
 from bridge.sessions import SessionManager
 from server import AgentBridge
 
@@ -35,17 +36,10 @@ class MockAdapter(Adapter):
         self.model = "mock-model"
         self.delay = delay
 
-    async def health(self) -> TargetStatus:
-        return TargetStatus.READY
+    async def health(self) -> HealthStatus:
+        return HealthStatus(status=TargetStatus.READY)
 
-    async def consult(
-        self,
-        brief,
-        urgency,
-        session,
-        timeout_s,
-        max_response_bytes,
-    ):
+    async def consult(self, brief, urgency, session, timeout_s, max_response_bytes):
         del urgency, session, timeout_s, max_response_bytes
         if self.delay:
             await asyncio.sleep(self.delay)
@@ -78,24 +72,14 @@ async def make_bridge(tmp_path, delay: float = 0.0) -> AgentBridge:
     adapter = MockAdapter(delay=delay)
     registry = Registry()
     registry.register(
-        target_id="mock",
-        adapter=adapter,
-        model=adapter.model,
-        kind=adapter.kind,
-        capabilities=adapter.capabilities,
-        max_concurrent=1,
-        max_response_bytes=1024,
-        max_session_turns=1,
+        adapter,
+        TargetLimits(max_concurrent=1, max_response_bytes=1024, max_session_turns=1),
     )
     return AgentBridge(
         registry=registry,
         sessions=SessionManager(tmp_path / "sessions.json"),
         audit=AuditLog(tmp_path / "audit.jsonl", tmp_path / "bodies"),
-        timeouts={
-            Urgency.QUICK: 1,
-            Urgency.DEEP: 1,
-            Urgency.BLOCKER: 1,
-        },
+        timeouts={Urgency.QUICK: 1, Urgency.DEEP: 1, Urgency.BLOCKER: 1},
     )
 
 
@@ -115,18 +99,8 @@ async def test_session_lifecycle_consult_close(tmp_path) -> None:
     bridge = await make_bridge(tmp_path)
     opened = await bridge.open_session("mock", "testing", max_turns=2)
 
-    first = await bridge.consult(
-        "mock",
-        brief(),
-        urgency=Urgency.DEEP,
-        session_id=opened.session_id,
-    )
-    second = await bridge.consult(
-        "mock",
-        brief(),
-        urgency=Urgency.DEEP,
-        session_id=opened.session_id,
-    )
+    first = await bridge.consult("mock", brief(), Urgency.DEEP, opened.session_id)
+    second = await bridge.consult("mock", brief(), Urgency.DEEP, opened.session_id)
     closed = await bridge.close_session(opened.session_id)
 
     assert first.outcome == Outcome.OK
@@ -139,19 +113,9 @@ async def test_session_lifecycle_consult_close(tmp_path) -> None:
 async def test_turn_cap_returns_rejected(tmp_path) -> None:
     bridge = await make_bridge(tmp_path)
     opened = await bridge.open_session("mock", "testing", max_turns=1)
-    await bridge.consult(
-        "mock",
-        brief(),
-        urgency=Urgency.DEEP,
-        session_id=opened.session_id,
-    )
+    await bridge.consult("mock", brief(), Urgency.DEEP, opened.session_id)
 
-    rejected = await bridge.consult(
-        "mock",
-        brief(),
-        urgency=Urgency.DEEP,
-        session_id=opened.session_id,
-    )
+    rejected = await bridge.consult("mock", brief(), Urgency.DEEP, opened.session_id)
 
     assert rejected.outcome == Outcome.REJECTED
     assert "turn cap" in rejected.warnings[0]

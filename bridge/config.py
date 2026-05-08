@@ -22,6 +22,15 @@ class TimeoutConfig:
 
 
 @dataclass(slots=True)
+class HealthConfigData:
+    """Server health-check settings in seconds."""
+
+    lazy_cache_seconds: float = 60.0
+    polled_interval_seconds: float = 15.0
+    check_timeout_seconds: float = 10.0
+
+
+@dataclass(slots=True)
 class ServerConfig:
     """Server-level configuration."""
 
@@ -34,6 +43,7 @@ class ServerConfig:
     max_context_bytes: int = 8_192
     max_attachments: int = 4
     timeouts: TimeoutConfig = field(default_factory=TimeoutConfig)
+    health: HealthConfigData = field(default_factory=HealthConfigData)
 
 
 @dataclass(slots=True)
@@ -71,11 +81,21 @@ def load_config(path: str | Path = "config/targets.toml") -> AppConfig:
     timeouts_raw = server_raw.get("timeouts", {})
     if not isinstance(timeouts_raw, dict):
         raise ValueError("[server.timeouts] must be a TOML table")
+    health_raw = server_raw.get("health", {})
+    if not isinstance(health_raw, dict):
+        raise ValueError("[server.health] must be a TOML table")
 
     timeouts = TimeoutConfig(
         quick=int(timeouts_raw.get("quick", 30)),
         deep=int(timeouts_raw.get("deep", 180)),
         blocker=int(timeouts_raw.get("blocker", 600)),
+    )
+    health = HealthConfigData(
+        lazy_cache_seconds=float(health_raw.get("lazy_cache_seconds", 60.0)),
+        polled_interval_seconds=float(
+            health_raw.get("polled_interval_seconds", 15.0)
+        ),
+        check_timeout_seconds=float(health_raw.get("check_timeout_seconds", 10.0)),
     )
     server = ServerConfig(
         host=str(server_raw.get("host", "127.0.0.1")),
@@ -91,6 +111,7 @@ def load_config(path: str | Path = "config/targets.toml") -> AppConfig:
         max_context_bytes=int(server_raw.get("max_context_bytes", 8_192)),
         max_attachments=int(server_raw.get("max_attachments", 4)),
         timeouts=timeouts,
+        health=health,
     )
 
     targets: dict[str, dict[str, Any]] = {}

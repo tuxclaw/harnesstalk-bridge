@@ -78,6 +78,11 @@ quick = 30        # seconds
 deep = 180
 blocker = 600
 
+[server.health]
+lazy_cache_seconds = 60
+polled_interval_seconds = 15
+check_timeout_seconds = 10
+
 [targets.hermes]
 adapter = "hermes"
 kind = "CLI_SUBPROCESS"
@@ -89,6 +94,18 @@ max_session_turns = 8
 max_concurrent = 4
 max_response_bytes = 32768
 strong_model = "mimo-7b-instruct"
+
+[targets.claude-api]
+adapter = "claude_api"
+kind = "HTTP_API"
+api_key_env = "ANTHROPIC_API_KEY"
+model = "claude-opus-4-7"
+strong_model = "claude-opus-4-7"
+max_tokens = 4096
+session_ttl_seconds = 3600
+max_session_turns = 16
+max_concurrent = 8
+max_response_bytes = 65536
 ```
 
 ### Adding a Target
