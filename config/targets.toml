@@ -1,0 +1,47 @@
+[server]
+host = "127.0.0.1"
+port = 7878
+transport = "stdio"
+audit_log = "state/audit.jsonl"
+audit_bodies_dir = "state/audit-bodies"
+sessions_path = "state/sessions.json"
+max_context_bytes = 8192
+max_attachments = 4
+
+[server.timeouts]
+quick = 30
+deep = 180
+blocker = 600
+
+[targets.hermes]
+adapter = "hermes"
+kind = "CLI_SUBPROCESS"
+command = ["hermes", "chat", "--quiet"]
+cwd = "/home/tux"
+model = "mimo-7b"
+session_ttl_seconds = 1800
+max_session_turns = 8
+max_concurrent = 4
+max_response_bytes = 32768
+strong_model = "mimo-7b-instruct"
+
+[targets.openclaw]
+adapter = "openclaw"
+kind = "MCP_PROXY"
+mcp_url = "http://127.0.0.1:9001/mcp"
+model = "openclaw"
+session_ttl_seconds = 1800
+max_session_turns = 8
+max_concurrent = 4
+max_response_bytes = 32768
+
+[targets.claude-api]
+adapter = "claude_api"
+kind = "HTTP_API"
+api_key_env = "ANTHROPIC_API_KEY"
+model = "claude-opus-4-7"
+max_tokens = 4096
+session_ttl_seconds = 1800
+max_session_turns = 8
+max_concurrent = 8
+max_response_bytes = 65536

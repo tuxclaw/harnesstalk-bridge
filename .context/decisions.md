@@ -14,13 +14,28 @@
 - Bazzite-friendly: everything under ~/.local and ~/.config
 
 ## [2026-05-08] Hermes Adapter Strategy
-**By:** Jack
-**Context:** Hermes CLI is interactive (`hermes chat`). Need non-interactive prompt→response.
-**Decision:** Use CLI_SUBPROCESS kind. Investigate if `hermes chat` supports piped input or a `--message` flag. If not, use PTY_ATTACHED as fallback. Adapter should declare SESSIONS_REPLAY capability (bridge replays history each turn).
-**Status:** Active — needs investigation during build
+**By:** Jack + Opus (spec update)
+**Context:** Hermes CLI is interactive (`hermes chat`), but persists sessions in `~/.hermes/` SQLite and supports `--resume <session_id>`.
+**Decision:** CLI_SUBPROCESS kind with SESSIONS_NATIVE capability. Commands:
+- Open session: `hermes chat -q "<seed prompt>" --quiet` → parse session id from `~/.hermes/sessions.db`
+- Consult: `hermes chat --resume <session_id> -q "<brief>" --quiet`
+- Stateless quick: `hermes chat -q "<brief>" --quiet --ignore-user-config`
+- Blocker: add `--model <strong_model>`
+- Prefer reading sessions.db over scraping stderr for session id capture
+**Status:** Active
 
 ## [2026-05-08] OpenClaw Adapter Strategy
 **By:** Jack
 **Context:** OpenClaw has built-in MCP support and session spawning.
 **Decision:** Use MCP_PROXY kind. The adapter calls OpenClaw's MCP server to spawn sessions and send messages. Declare SESSIONS_NATIVE capability if OpenClaw sessions are resumable, otherwise SESSIONS_REPLAY.
 **Status:** Active — needs investigation during build
+
+## [2026-05-08] Review Hardening Decisions
+**By:** Helen
+**Context:** Frozone identified concurrency, timeout, I/O, and maintainability risks in the first Agent Bridge MCP implementation.
+**Decisions:**
+- Use guarded `_in_use` accounting only for target concurrency instead of dual semaphore + counter state.
+- Let adapters own exact request timeouts while the bridge uses a 5-second cleanup grace period.
+- Centralize response byte bounding in `adapters/base.py`.
+- Keep pooled `httpx.AsyncClient` instances on HTTP adapters and expose adapter-level `close()` for cleanup.
+**Status:** Active

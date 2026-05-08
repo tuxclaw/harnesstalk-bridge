@@ -126,10 +126,22 @@ class TokenMethod(str, Enum):
 # Capabilities each kind is forbidden from claiming. The bridge calls
 # validate_capabilities(kind, caps) at registration; mismatch -> startup
 # failure. Better to crash at boot than serve lies via list_targets.
+#
+# Design note: this table narrows obvious lies, not every possible mismatch.
+# A CLI_SUBPROCESS adapter CAN claim SESSIONS_NATIVE if the underlying
+# harness persists sessions externally and accepts a resume flag (Hermes
+# does this via its SQLite store + --resume <session_id>). The honest
+# constraint is "an adapter must declare its actual capabilities" — kind
+# is a hint for what's typical, not a hard predictor.
+#
+# EXACT_TOKENS stays forbidden for subprocess/PTY kinds because a wrapper
+# process genuinely cannot see the provider's API response payload. If a
+# harness writes exact counts to stderr or a log file, the adapter can
+# parse them and claim... still not EXACT_TOKENS, because that's
+# transport-level exactness from the model API. Estimated counts from
+# subprocess output are ESTIMATED.
 _KIND_FORBIDDEN_CAPS: dict[AdapterKind, frozenset[Capability]] = {
-    AdapterKind.CLI_SUBPROCESS: frozenset(
-        {Capability.SESSIONS_NATIVE, Capability.EXACT_TOKENS}
-    ),
+    AdapterKind.CLI_SUBPROCESS: frozenset({Capability.EXACT_TOKENS}),
     AdapterKind.PTY_ATTACHED: frozenset({Capability.EXACT_TOKENS}),
     AdapterKind.MCP_PROXY: frozenset(),    # depends on harness; trust the declaration
     AdapterKind.HTTP_API: frozenset(),     # model-dependent; trust the declaration

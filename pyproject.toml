@@ -26,6 +26,8 @@ agent-bridge = "server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["adapters", "bridge"]
+artifacts = ["server.py", "config/targets.toml", "systemd/agent-bridge.service"]
 
 [tool.pytest.ini_options]
-asyncio_mode = "auto"
+testpaths = ["tests"]
+asyncio_mode = "strict"

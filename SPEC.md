@@ -48,16 +48,18 @@ agent-bridge-mcp/
 
 ## Adapter taxonomy
 
-Each adapter declares its `kind` as a class attribute. The kind constrains which capabilities it can claim — the bridge enforces this at registration so a CLI adapter can't lie and say it has native sessions.
+Each adapter declares its `kind` as a class attribute. The kind constrains which capabilities it can claim — the bridge enforces this at registration so an adapter can't claim what its transport can't deliver.
 
 | Adapter kind | Mechanism | Sessions | Streaming | Token counts |
 |---|---|---|---|---|
 | `HTTP_API` | requests / SDK | native (conversation array) | native (SSE) | exact |
 | `MCP_PROXY` | bridge calls target's MCP server | depends on harness | depends on harness | from harness if exposed |
-| `CLI_SUBPROCESS` | spawn + stdin/stdout | usually replay only | line-buffered stdout if lucky | estimated via tokenizer |
+| `CLI_SUBPROCESS` | spawn + stdin/stdout | depends on harness — replay if stateless, native if harness persists + supports `--resume` | line-buffered stdout if lucky | estimated via tokenizer |
 | `PTY_ATTACHED` | pexpect against a REPL | yes-ish, fragile | yes | unknown |
 
 Pick the row, live with its constraints. No optimism in the adapter declarations.
+
+**Design note on CLI_SUBPROCESS + SESSIONS_NATIVE.** The taxonomy was originally going to forbid this combination on the theory that "subprocess transport implies no persistent backing store." That's wrong. Hermes is a counterexample: the subprocess wrapper exits, but the harness persists conversation state in `~/.hermes/` SQLite and accepts `--resume <session_id>`. The bridge stores the id, passes it on resume, no replay tax. The honest constraint is whether the *harness* has session memory, not whether the *bridge* talks to it via subprocess. So the rule is relaxed: `CLI_SUBPROCESS` can claim `SESSIONS_NATIVE` if its harness supports it. `EXACT_TOKENS` stays forbidden — a wrapper process genuinely cannot see the model API's response payload, even if the harness writes counts to stderr (those are the harness's estimate, not the API's exact figure).
 
 ## Capabilities
 
@@ -265,12 +267,35 @@ class Adapter(ABC):
 Bridge passes `timeout_s` and `max_response_bytes` to the adapter — adapter is responsible for enforcing them at the protocol level it owns (subprocess kill, HTTP timeout, etc.). The bridge wraps the whole call in `asyncio.wait_for` as a backstop.
 
 Capability validation at registration:
-- `kind=CLI_SUBPROCESS` cannot claim `SESSIONS_NATIVE` or `EXACT_TOKENS`.
+- `kind=CLI_SUBPROCESS` cannot claim `EXACT_TOKENS`. May claim `SESSIONS_NATIVE` if the harness persists sessions externally (see design note in Adapter taxonomy).
 - `kind=HTTP_API` can claim anything (model-dependent).
 - `kind=PTY_ATTACHED` cannot claim `EXACT_TOKENS`.
+- `kind=MCP_PROXY` can claim anything (harness-dependent).
 - All adapters must claim exactly one of `SESSIONS_NATIVE` / `SESSIONS_REPLAY` / `SESSIONS_NONE`.
 
 Bridge fails to start if any adapter declares an inconsistent set. Better to crash at boot than serve lies via `list_targets`.
+
+### Worked example: Hermes adapter declaration
+
+```python
+class HermesAdapter(Adapter):
+    id = "hermes"
+    kind = AdapterKind.CLI_SUBPROCESS
+    capabilities = frozenset({
+        Capability.SESSIONS_NATIVE,   # Hermes persists in ~/.hermes/ SQLite
+        Capability.STREAMING,         # --quiet streams clean stdout
+        # Not EXACT_TOKENS — wrapper can't see the provider's API response
+    })
+    model = "mimo-7b"  # set from targets.toml
+```
+
+Command shape:
+- **Open session:** `hermes chat -q "<seed prompt with purpose>" --quiet` → parse session id from stderr or `~/.hermes/sessions.db`. Store as `Session.adapter_handle`.
+- **Consult on existing session:** `hermes chat --resume <session_id> -q "<formatted brief>" --quiet`
+- **Stateless quick consult:** `hermes chat -q "<brief>" --quiet --ignore-user-config` for reproducible one-shots
+- **Blocker urgency:** add `--model <strong_model>` from target config
+
+The session id capture is the one fragile bit. Adapter implementation note: prefer reading `~/.hermes/sessions.db` after spawn (stable interface) over scraping stderr (output format may change). Document the SQLite schema in the adapter file so future-Dan knows what he's depending on.
 
 ## Audit log format (v2.1)
 
