@@ -56,6 +56,34 @@ harnesstalk-bridge
 
 # Run (HTTP — for shared server instance)
 harnesstalk-bridge --transport streamable-http
+
+# Run the read-only TUI inspector against the HTTP server
+agent-bridge tui
+```
+
+## TUI Inspector
+
+Install the optional extra and run the Textual inspector against a local `streamable-http` bridge:
+
+```bash
+pip install -e '.[tui]'
+agent-bridge tui --bridge-url http://127.0.0.1:7878/mcp
+```
+
+The TUI is read-only. It polls `list_targets`, `list_sessions`, and `get_audit`; it never calls `consult`, `open_session`, or `close_session`. Key bindings: `q` quit, `r` refresh, `/` filter audit, `esc` clear/close.
+
+Preview:
+
+```text
+Agent Bridge — Inspector    v3.1.0    connected · 0s ago
+┌ TARGETS ───────────────┐ ┌ SESSIONS ───────────────────────┐
+│ id      kind status    │ │ id          target turns ttl     │
+│ hermes  CLI  ● READY   │ │ sess_a1b2.. hermes 3/8   24m     │
+└────────────────────────┘ └──────────────────────────────────┘
+┌ AUDIT ──────────────────────────────────────────────────────┐
+│ 14:22:01 hermes blocker ok  4.3s  ~883/~412 tok  →          │
+│ Detail: select an entry to view metadata                     │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ## Configuration
@@ -82,6 +110,15 @@ blocker = 600
 lazy_cache_seconds = 60
 polled_interval_seconds = 15
 check_timeout_seconds = 10
+
+[tui]
+bridge_url = "http://127.0.0.1:7878/mcp"
+poll_targets_seconds = 5
+poll_sessions_seconds = 5
+poll_audit_seconds = 2
+audit_initial_limit = 200
+theme = "dracula"
+mouse = true
 
 [targets.hermes]
 adapter = "hermes"

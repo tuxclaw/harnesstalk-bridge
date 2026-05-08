@@ -1,0 +1,67 @@
+Screen {
+    background: #282a36;
+    color: #f8f8f2;
+}
+
+#status-bar {
+    dock: top;
+    height: 1;
+    background: #44475a;
+    color: #f8f8f2;
+    padding: 0 1;
+}
+
+#main-layout {
+    height: 1fr;
+}
+
+#top-panels {
+    height: 42%;
+}
+
+#targets-panel, #sessions-panel, #audit-panel {
+    border: solid #6272a4;
+    padding: 0 1;
+}
+
+#targets-panel, #sessions-panel {
+    width: 1fr;
+}
+
+#audit-panel {
+    height: 1fr;
+}
+
+.panel-title {
+    color: #8be9fd;
+    text-style: bold;
+    height: 1;
+}
+
+DataTable {
+    height: 1fr;
+    background: #282a36;
+    color: #f8f8f2;
+    scrollbar-color: #bd93f9 #44475a;
+}
+
+#audit-detail {
+    height: 6;
+    border-top: solid #44475a;
+    color: #f8f8f2;
+}
+
+Footer {
+    dock: bottom;
+    height: 1;
+    background: #44475a;
+}
+
+#help-modal {
+    width: 70;
+    height: 7;
+    padding: 1 2;
+    border: thick #bd93f9;
+    background: #282a36;
+    color: #f8f8f2;
+}

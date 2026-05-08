@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -423,6 +424,11 @@ async def amain() -> None:
 
 def main() -> None:
     """CLI entrypoint."""
+    if len(sys.argv) > 1 and sys.argv[1] == "tui":
+        from tui.__main__ import main as tui_main
+
+        tui_main(sys.argv[2:])
+        return
     asyncio.run(amain())
 
 

@@ -425,6 +425,7 @@ class ConsultResult(BaseModel):
 class AuditEntry(BaseModel):
     """One line of state/audit.jsonl. Full bodies live in audit-bodies/."""
 
+    id: str = Field(default_factory=lambda: f"aud_{uuid4().hex[:16]}")
     ts: datetime = Field(default_factory=_now)
     target: str
     urgency: Urgency

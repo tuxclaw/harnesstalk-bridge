@@ -18,6 +18,15 @@ lazy_cache_seconds = 60
 polled_interval_seconds = 15
 check_timeout_seconds = 10
 
+[tui]
+bridge_url = "http://127.0.0.1:7878/mcp"
+poll_targets_seconds = 5
+poll_sessions_seconds = 5
+poll_audit_seconds = 2
+audit_initial_limit = 200
+theme = "dracula"
+mouse = true
+
 [targets.hermes]
 adapter = "hermes"
 kind = "CLI_SUBPROCESS"

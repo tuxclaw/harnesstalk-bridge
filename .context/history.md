@@ -23,3 +23,9 @@
 **Branch:** andy/v3-upgrade
 **Changes:** Updated consumers for v3 protocol/registry APIs; fixed bridge exports; updated Hermes/OpenClaw health to return `HealthStatus`; rewrote Claude API adapter for direct Anthropic streaming, exact token accounting, in-memory sessions, health probing, truncation, and blocker strong-model routing; added `bridge/streaming.py`; rewired server consult/list_targets/build paths to v3 registry and streaming wrapper; added `[server.health]` config parsing and config examples.
 **Tests:** Added v3 health state-machine, Claude API adapter, and streaming wrapper coverage. `python -m pytest tests/ -q` — 33 passed.
+
+## [2026-05-08] v3.1 TUI Inspector
+**Agent:** Dash
+**Branch:** andy/v3.1-tui
+**Changes:** Added read-only Textual TUI package with targets, sessions, audit panels, Dracula styling, read-only HTTP MCP client, audit filter parser, `AuditEntry.id`, `[tui]` config parsing, CLI/script wiring, and README TUI section.
+**Verification:** `.venv/bin/python -m pytest tests/ -v` — 40 passed.

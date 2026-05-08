@@ -1,0 +1,6 @@
+"""Read-only Textual inspector for Agent Bridge MCP."""
+
+from __future__ import annotations
+
+__all__ = ["__version__"]
+__version__ = "3.1.0"

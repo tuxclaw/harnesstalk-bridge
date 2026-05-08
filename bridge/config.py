@@ -47,11 +47,25 @@ class ServerConfig:
 
 
 @dataclass(slots=True)
+class TuiConfig:
+    """Read-only TUI configuration."""
+
+    bridge_url: str = "http://127.0.0.1:7878/mcp"
+    poll_targets_seconds: float = 5.0
+    poll_sessions_seconds: float = 5.0
+    poll_audit_seconds: float = 2.0
+    audit_initial_limit: int = 200
+    theme: str = "dracula"
+    mouse: bool = True
+
+
+@dataclass(slots=True)
 class AppConfig:
     """Top-level bridge configuration."""
 
     server: ServerConfig
     targets: dict[str, dict[str, Any]]
+    tui: TuiConfig = field(default_factory=TuiConfig)
 
 
 def load_config(path: str | Path = "config/targets.toml") -> AppConfig:
@@ -72,9 +86,12 @@ def load_config(path: str | Path = "config/targets.toml") -> AppConfig:
         raw = tomllib.load(handle)
 
     server_raw = raw.get("server", {})
+    tui_raw = raw.get("tui", {})
     targets_raw = raw.get("targets", {})
     if not isinstance(server_raw, dict):
         raise ValueError("[server] must be a TOML table")
+    if not isinstance(tui_raw, dict):
+        raise ValueError("[tui] must be a TOML table")
     if not isinstance(targets_raw, dict):
         raise ValueError("[targets] must be a TOML table")
 
@@ -113,6 +130,17 @@ def load_config(path: str | Path = "config/targets.toml") -> AppConfig:
         timeouts=timeouts,
         health=health,
     )
+    tui = TuiConfig(
+        bridge_url=str(tui_raw.get("bridge_url", "http://127.0.0.1:7878/mcp")),
+        poll_targets_seconds=float(tui_raw.get("poll_targets_seconds", 5.0)),
+        poll_sessions_seconds=float(tui_raw.get("poll_sessions_seconds", 5.0)),
+        poll_audit_seconds=float(tui_raw.get("poll_audit_seconds", 2.0)),
+        audit_initial_limit=int(tui_raw.get("audit_initial_limit", 200)),
+        theme=str(tui_raw.get("theme", "dracula")),
+        mouse=bool(tui_raw.get("mouse", True)),
+    )
+    if tui.theme != "dracula":
+        raise ValueError('[tui].theme must be "dracula"')
 
     targets: dict[str, dict[str, Any]] = {}
     for target_id, target_raw in targets_raw.items():
@@ -120,4 +148,4 @@ def load_config(path: str | Path = "config/targets.toml") -> AppConfig:
             raise ValueError(f"[targets.{target_id}] must be a TOML table")
         targets[str(target_id)] = dict(target_raw)
 
-    return AppConfig(server=server, targets=targets)
+    return AppConfig(server=server, targets=targets, tui=tui)
