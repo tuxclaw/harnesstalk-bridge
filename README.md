@@ -25,9 +25,13 @@ A local [MCP](https://modelcontextprotocol.io) server that lets AI agent harness
 - **Structured briefs** — goal/tried/failing/ask format forces clear questions
 - **Urgency tiers** — `quick` (stateless), `deep` (persistent session), `blocker` (stronger model)
 - **Honest capabilities** — adapters declare what they can actually do; the bridge validates at boot
+- **Hybrid health checks** — lazy by default, background polling only for unhealthy targets; idle bridges stay quiet, outages get noticed
+- **Streaming** — `consult(stream=true)` yields tokens via MCP progress notifications as they arrive
+- **Claude API adapter** — second adapter with all four optional capabilities (native sessions, streaming, exact tokens, strong model)
 - **Non-blocking concurrency** — per-session locks + per-target semaphores, `BUSY` on contention
 - **Bounded responses** — `max_response_bytes` per target, truncation surfaced as a flag
 - **Audit log** — JSONL index + body store for forensics
+- **TUI Inspector** — read-only Textual dashboard for targets, sessions, and audit with filtering
 - **Bazzite-friendly** — everything under `~/.local` and `~/.config`, no layered packages
 
 ## Requirements
@@ -145,6 +149,23 @@ max_concurrent = 8
 max_response_bytes = 65536
 ```
 
+### Health Checks
+
+Each target has a lifecycle state machine:
+
+- **LAZY** (idle) — health checked on `list_targets` if cache expired (60s default)
+- **CHECKING** — health check in flight; concurrent callers share the result (single-flight)
+- **POLLED** — target was unhealthy; background poller checks every 15s until recovery
+
+Configure under `[server.health]`:
+
+```toml
+[server.health]
+lazy_cache_seconds = 60
+polled_interval_seconds = 15
+check_timeout_seconds = 10
+```
+
 ### Adding a Target
 
 Add a TOML block + create an adapter file in `adapters/`. No server changes needed.
@@ -169,6 +190,8 @@ Returns all configured targets with their capabilities and status.
 ### `consult(target, brief, urgency, session_id?, stream?)`
 
 Hand a brief to a target agent, block on response.
+
+When `stream=true`, the server emits MCP progress notifications as tokens arrive from the target. The final tool result is still a complete `ConsultResult` — clients that don't handle progress notifications see the same result as `stream=false`.
 
 **Brief schema:**
 ```json
@@ -300,15 +323,21 @@ harnesstalk-bridge/
 ├── server.py                 # FastMCP server + AgentBridge orchestrator
 ├── bridge/
 │   ├── protocol.py           # Pydantic models (single source of types)
-│   ├── registry.py           # Target registration, capability validation
+│   ├── registry.py           # Health state machine, target registration
 │   ├── sessions.py           # Session lifecycle, TTL, per-session locks
 │   ├── audit.py              # JSONL audit log + body store
+│   ├── streaming.py          # MCP progress notification wrapper
 │   └── config.py             # TOML config loader
 ├── adapters/
 │   ├── base.py               # Adapter ABC + shared utilities
-│   ├── hermes.py             # CLI_SUBPROCESS adapter
+│   ├── hermes.py             # CLI_SUBPROCESS adapter (native sessions)
 │   ├── openclaw.py           # MCP_PROXY adapter
-│   └── claude_api.py         # HTTP_API adapter
+│   └── claude_api.py         # HTTP_API adapter (streaming, exact tokens)
+├── tui/                      # Read-only Textual TUI inspector
+│   ├── app.py                # Textual App, 4-panel layout
+│   ├── client.py             # Read-only MCP HTTP client
+│   ├── widgets/              # Targets, sessions, audit panels + status bar
+│   └── styles.tcss           # Dracula theme CSS
 ├── config/targets.toml       # Target configuration
 ├── tests/                    # pytest + pytest-asyncio
 ├── systemd/                  # User systemd unit
@@ -340,3 +369,32 @@ ruff check .
 ## License
 
 MIT
+
+## Changelog
+
+### v3.1 — TUI Inspector
+- Read-only Textual dashboard with targets, sessions, and audit panels
+- Audit filtering by target, urgency, outcome, truncation, streaming, and time window
+- Dracula theme, responsive layout, mouse support
+- Scroll-aware audit refresh, cursor restore across polls
+- `AuditEntry.id` field for stable selection
+- `agent-bridge tui` CLI entry point
+
+### v3 — Multi-Target Honest Bridge
+- Hybrid health checks: LAZY → CHECKING → POLLED state machine with background polling
+- Claude API adapter: HTTP_API with native sessions, streaming, exact tokens, strong model
+- MCP progress notifications: `consult(stream=true)` yields tokens as they arrive
+- `HealthStatus` typed model with latency, error message, and streak counters
+- Streaming module: wraps every consult call, emits progress when requested
+
+### v2.2 — Hermes Native Sessions
+- Hermes adapter flipped from SESSIONS_REPLAY to SESSIONS_NATIVE
+- Reads session ids from `~/.hermes/state.db`, passes `--resume <id>` on follow-ups
+- Bridge-side replay history unused — Hermes manages its own context
+
+### v2.1 — Foundation
+- Symmetric `consult` primitive with structured `Brief`
+- Urgency tiers: quick, deep, blocker
+- Capability validation at registration
+- Per-session locks + per-target semaphores
+- Audit log with JSONL index + body store
