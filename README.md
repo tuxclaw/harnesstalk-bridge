@@ -235,6 +235,10 @@ Register the bridge as an MCP server in your OpenClaw config. For HTTP transport
 
 Register `http://127.0.0.1:7878` as a streamable-HTTP MCP server in your Hermes config.
 
+The Hermes adapter uses **native sessions** (`SESSIONS_NATIVE`): it captures session ids from
+`~/.hermes/state.db` after each spawn and passes `--resume <id>` on follow-up consults.
+Bridge-side replay history is unused — Hermes manages its own context.
+
 ## Project Structure
 
 ```
