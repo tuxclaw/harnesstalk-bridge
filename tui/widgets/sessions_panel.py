@@ -68,8 +68,9 @@ def _relative(value: datetime) -> str:
 def _ttl(last_used_at: datetime, ttl_seconds: int) -> str:
     if last_used_at.tzinfo is None:
         last_used_at = last_used_at.replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
     expires = last_used_at + timedelta(seconds=ttl_seconds)
-    seconds = int((expires - datetime.now(timezone.utc)).total_seconds())
+    seconds = int((expires - now).total_seconds())
     if seconds <= 0:
         return "expired"
     if seconds < 60:

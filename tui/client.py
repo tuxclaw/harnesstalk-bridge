@@ -98,7 +98,7 @@ class BridgeClient:
             response = await self._client.post(
                 self.bridge_url,
                 json=request,
-                headers={"Accept": "application/json, text/event-stream"},
+                headers={"Accept": "application/json"},
             )
             response.raise_for_status()
             data = response.json()
