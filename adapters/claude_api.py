@@ -187,6 +187,7 @@ class ClaudeApiAdapter(Adapter):
                             else:
                                 yield ConsultChunk(type="text", text=suffix)
                             truncated = True
+                            break
                     elif event_type == "message_delta":
                         usage = event.get("usage", {})
                         tokens_out = _exact_from_usage(usage, "output_tokens")
