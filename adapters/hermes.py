@@ -55,19 +55,20 @@ class HermesAdapter(Adapter):
         timeout_s: int,
         max_response_bytes: int,
     ) -> AsyncIterator[ConsultChunk]:
-        """Send one formatted prompt to Hermes."""
+        """Send one formatted prompt to Hermes via -q flag."""
         prompt = self._prompt_with_replay(brief, session)
         command = self._command_for(urgency)
+        # Hermes uses -q for non-interactive query mode
+        command.extend(["-q", prompt])
         try:
             proc = await asyncio.create_subprocess_exec(
                 *command,
-                stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=self.cwd,
             )
             stdout, stderr = await asyncio.wait_for(
-                proc.communicate(prompt.encode("utf-8")),
+                proc.communicate(),
                 timeout=timeout_s,
             )
         except TimeoutError:

@@ -16,7 +16,7 @@ blocker = 600
 [targets.hermes]
 adapter = "hermes"
 kind = "CLI_SUBPROCESS"
-command = ["hermes", "chat", "--quiet"]
+command = ["hermes", "chat", "-Q"]
 cwd = "/home/tux"
 model = "mimo-7b"
 session_ttl_seconds = 1800
