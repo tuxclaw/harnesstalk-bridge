@@ -19,7 +19,10 @@ from bridge.protocol import (
 )
 
 HERMES_DB_PATH = Path.home() / ".hermes" / "state.db"
-HERMES_SCHEMA_VERSION = "1"
+# Schema version: tracked by column set. If Hermes adds/removes columns,
+# update HERMES_REQUIRED_SESSION_COLUMNS and this comment. The adapter
+# validates via PRAGMA table_info, not a version number — Hermes doesn't
+# store a schema version constant we can read.
 HERMES_REQUIRED_SESSION_COLUMNS = frozenset(
     {"id", "started_at", "source", "ended_at", "message_count"}
 )
@@ -171,7 +174,7 @@ class HermesAdapter(Adapter):
         missing = HERMES_REQUIRED_SESSION_COLUMNS - columns
         if missing:
             return (
-                f"Hermes schema version {HERMES_SCHEMA_VERSION} mismatch: "
+                f"Hermes schema mismatch: "
                 f"sessions missing {sorted(missing)}"
             )
         return None

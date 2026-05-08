@@ -39,3 +39,16 @@
 - Centralize response byte bounding in `adapters/base.py`.
 - Keep pooled `httpx.AsyncClient` instances on HTTP adapters and expose adapter-level `close()` for cleanup.
 **Status:** Active
+
+## [2026-05-08] v2.2 Patch — SESSIONS_NATIVE Upgrade
+**By:** Jack (orchestrator)
+**Context:** v2.2 spec calls for flipping Hermes adapter from SESSIONS_REPLAY to SESSIONS_NATIVE. Discovery checklist run first.
+**Key findings from discovery:**
+- **DB path correction:** Spec says `~/.hermes/sessions.db` but actual session store is `~/.hermes/state.db`. The `sessions.db` file is 0 bytes.
+- **Schema:** `sessions` table with `id` TEXT PK (format: `YYYYMMDD_HHMMSS_hex6`), `source`, `started_at` REAL, `ended_at` REAL, `end_reason`, `message_count`, token count columns, `title`.
+- **`--resume SESSION_ID`** confirmed on `hermes chat --help`.
+- **`--quiet` / `-Q`** suppresses banner/spinner, outputs final response + session info.
+- **Session JSONL files** also in `~/.hermes/sessions/` but the relational store is `state.db`.
+**Decision:** Use Path A (read SQLite). DB path = `~/.hermes/state.db`. Query `sessions` table ordered by `started_at DESC LIMIT 1` after spawn to capture session id. Set `HERMES_DB_PATH` constant with schema-version check at init.
+**Tests required:** 3 tests per spec (capability validation, single-turn parity, multi-turn token regression).
+**Status:** Active
