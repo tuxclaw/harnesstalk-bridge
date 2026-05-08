@@ -49,6 +49,7 @@ class TargetsPanel(Vertical):
     def update_targets(self, targets: list[Target], *, stale: bool = False) -> None:
         title = "TARGETS (stale)" if stale else "TARGETS"
         self.query_one(".panel-title", Static).update(title)
+        cursor_row = self.table.cursor_row
         self.table.clear()
         for target in targets:
             self.table.add_row(
@@ -60,6 +61,8 @@ class TargetsPanel(Vertical):
                 " ".join(_CAPS.get(cap, cap.value) for cap in target.capabilities),
                 key=target.id,
             )
+        if targets and cursor_row is not None:
+            self.table.move_cursor(row=min(cursor_row, len(targets) - 1), scroll=False)
 
 
 def _relative(value: datetime | None) -> str:

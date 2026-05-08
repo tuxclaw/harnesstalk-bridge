@@ -29,3 +29,10 @@
 **Branch:** andy/v3.1-tui
 **Changes:** Added read-only Textual TUI package with targets, sessions, audit panels, Dracula styling, read-only HTTP MCP client, audit filter parser, `AuditEntry.id`, `[tui]` config parsing, CLI/script wiring, and README TUI section.
 **Verification:** `.venv/bin/python -m pytest tests/ -v` — 40 passed.
+
+## [2026-05-08] v3.1 TUI Frozone Warning Fixes
+**Agent:** Dash
+**Branch:** andy/v3.1-tui
+**Commit:** this commit
+**Changes:** Fixed per-cycle connection failure counting, scroll-aware audit refresh with pending new-entry header, narrow-width stacked panel layout, DataTable cursor restoration, async audit body reads, and per-token estimated prefixes.
+**Verification:** `.venv/bin/python -m pytest tests/ -q` — 40 passed.

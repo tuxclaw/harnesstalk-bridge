@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
+from textual import events
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
@@ -82,6 +83,7 @@ class AgentBridgeInspector(App[None]):
         self.audit_panel = AuditPanel(self.settings.audit_bodies_dir)
         self.filter_input = Input(placeholder="audit filter", id="filter-input")
         self.failures = 0
+        self._poll_results: dict[str, bool] = {}
 
     def compose(self) -> ComposeResult:
         yield self.status
@@ -95,6 +97,7 @@ class AgentBridgeInspector(App[None]):
 
     async def on_mount(self) -> None:
         self.filter_input.display = False
+        self._sync_responsive_layout(self.size.width)
         self.set_interval(1.0, self.status.refresh_status)
         self.set_interval(self.settings.poll_targets_seconds, self.refresh_targets)
         self.set_interval(self.settings.poll_sessions_seconds, self.refresh_sessions)
@@ -106,23 +109,26 @@ class AgentBridgeInspector(App[None]):
         await self.refresh_sessions()
         await self.refresh_audit()
 
+    def on_resize(self, event: events.Resize) -> None:
+        self._sync_responsive_layout(event.size.width)
+
     async def refresh_targets(self) -> None:
         targets = await self.client.list_targets()
-        self._record_state(self.client.connected)
+        self._record_poll("targets", self.client.connected)
         if targets is not None:
             self.targets_panel.update_targets(targets, stale=not self.client.connected)
 
     async def refresh_sessions(self) -> None:
         sessions = await self.client.list_sessions()
-        self._record_state(self.client.connected)
+        self._record_poll("sessions", self.client.connected)
         if sessions is not None:
             self.sessions_panel.update_sessions(sessions, stale=not self.client.connected)
 
     async def refresh_audit(self) -> None:
         entries = await self.client.get_audit(limit=self.settings.audit_initial_limit)
-        self._record_state(self.client.connected)
+        self._record_poll("audit", self.client.connected)
         if entries is not None:
-            self.audit_panel.update_entries(entries, stale=not self.client.connected)
+            self.audit_panel.ingest_entries(entries, stale=not self.client.connected)
 
     def action_help(self) -> None:
         self.push_screen(HelpScreen())
@@ -152,9 +158,9 @@ class AgentBridgeInspector(App[None]):
             return
         self.audit_panel.close_detail()
 
-    def action_detail(self) -> None:
+    async def action_detail(self) -> None:
         if self.focused and self.focused.id == "audit-table":
-            self.audit_panel.show_selected_detail()
+            await self.audit_panel.show_selected_detail()
 
     def action_focus_targets(self) -> None:
         self.targets_panel.table.focus()
@@ -168,6 +174,13 @@ class AgentBridgeInspector(App[None]):
     async def on_unmount(self) -> None:
         await self.client.close()
 
-    def _record_state(self, connected: bool) -> None:
-        self.failures = 0 if connected else self.failures + 1
-        self.status.set_state(connected=connected, failures=self.failures)
+    def _sync_responsive_layout(self, width: int) -> None:
+        self.set_class(width < 100, "narrow")
+
+    def _record_poll(self, name: str, connected: bool) -> None:
+        self._poll_results[name] = connected
+        if {"targets", "sessions", "audit"} <= self._poll_results.keys():
+            cycle_connected = all(self._poll_results.values())
+            self.failures = 0 if cycle_connected else self.failures + 1
+            self.status.set_state(connected=cycle_connected, failures=self.failures)
+            self._poll_results.clear()

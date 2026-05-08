@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
@@ -141,6 +142,9 @@ class AuditPanel(Vertical):
         self.filtered_entries: list[AuditEntry] = []
         self.audit_filter: AuditFilter | None = None
         self.filter_error: str | None = None
+        self.pending_entries: list[AuditEntry] | None = None
+        self.pending_new_count = 0
+        self._last_stale = False
 
     def compose(self) -> ComposeResult:
         yield Static("AUDIT", classes="panel-title")
@@ -149,10 +153,24 @@ class AuditPanel(Vertical):
 
     def on_mount(self) -> None:
         self.table.add_columns("time", "target", "urgency", "outcome", "elapsed", "tokens", "streamed")
+        self.watch(self.table, "scroll_y", self._on_table_scroll_y, init=False)
+
+    def ingest_entries(self, entries: list[AuditEntry], *, stale: bool = False) -> None:
+        if self.is_at_top:
+            self.update_entries(entries, stale=stale)
+            return
+        visible_ids = {entry.id for entry in self.entries}
+        self.pending_entries = entries
+        self.pending_new_count = sum(1 for entry in entries if entry.id not in visible_ids)
+        self._last_stale = stale
+        self._update_header(stale=stale)
 
     def update_entries(self, entries: list[AuditEntry], *, stale: bool = False) -> None:
         self.entries = entries
         self.filtered_entries = apply_audit_filter(entries, self.audit_filter)
+        self.pending_entries = None
+        self.pending_new_count = 0
+        self._last_stale = stale
         self._update_header(stale=stale)
         self._render_rows()
 
@@ -161,12 +179,12 @@ class AuditPanel(Vertical):
         self.filter_error = error
         self.update_entries(self.entries)
 
-    def show_selected_detail(self) -> None:
+    async def show_selected_detail(self) -> None:
         if not self.filtered_entries or self.table.cursor_row is None:
             return
         index = min(self.table.cursor_row, len(self.filtered_entries) - 1)
         entry = self.filtered_entries[index]
-        self.detail.update(_detail_text(entry, self._read_body(entry.brief_hash)))
+        self.detail.update(_detail_text(entry, await self._read_body(entry.brief_hash)))
 
     def close_detail(self) -> None:
         self.detail.update("Detail: [select an entry to view brief + response]")
@@ -175,24 +193,39 @@ class AuditPanel(Vertical):
         title = "AUDIT"
         if self.audit_filter and self.audit_filter.active:
             title += f" — filtered: {self.audit_filter.expression} ({len(self.filtered_entries)} of {len(self.entries)})"
+        if self.pending_new_count:
+            title += f" — {self.pending_new_count} new"
         if self.filter_error:
             title += f" — filter error: {self.filter_error}"
         if stale:
             title += " (stale)"
         self.query_one(".panel-title", Static).update(title)
 
-    def _read_body(self, brief_hash: str) -> dict[str, object] | None:
+    @property
+    def is_at_top(self) -> bool:
+        return self.table.scroll_y <= 0
+
+    def apply_pending_if_at_top(self) -> None:
+        if self.is_at_top and self.pending_entries is not None:
+            self.update_entries(self.pending_entries, stale=self._last_stale)
+
+    def _on_table_scroll_y(self, _: float) -> None:
+        self.apply_pending_if_at_top()
+
+    async def _read_body(self, brief_hash: str) -> dict[str, object] | None:
         path = self.bodies_dir / f"{brief_hash.replace(':', '_')}.json"
         if not path.exists():
             return None
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
+            text = await asyncio.to_thread(path.read_text, encoding="utf-8")
+            data = json.loads(text)
         except (OSError, json.JSONDecodeError) as exc:
             logger.warning("failed to read audit body %s: %s", path, exc)
             return None
         return data if isinstance(data, dict) else None
 
     def _render_rows(self) -> None:
+        cursor_row = self.table.cursor_row
         self.table.clear()
         for entry in self.filtered_entries:
             self.table.add_row(
@@ -205,6 +238,8 @@ class AuditPanel(Vertical):
                 "[pink]→[/]" if entry.streamed else "",
                 key=entry.id,
             )
+        if self.filtered_entries and cursor_row is not None:
+            self.table.move_cursor(row=min(cursor_row, len(self.filtered_entries) - 1), scroll=False)
 
 
 def _parse_window(value: str) -> timedelta:
@@ -244,8 +279,9 @@ def _elapsed(ms: int) -> str:
 def _tokens(entry: AuditEntry) -> str:
     if entry.tokens_in.method == TokenMethod.UNKNOWN or entry.tokens_out.method == TokenMethod.UNKNOWN:
         return "-"
-    prefix = "~" if TokenMethod.ESTIMATED in {entry.tokens_in.method, entry.tokens_out.method} else ""
-    return f"{prefix}{entry.tokens_out.value}/{prefix}{entry.tokens_in.value} tok"
+    out_prefix = "~" if entry.tokens_out.method == TokenMethod.ESTIMATED else ""
+    in_prefix = "~" if entry.tokens_in.method == TokenMethod.ESTIMATED else ""
+    return f"{out_prefix}{entry.tokens_out.value}/{in_prefix}{entry.tokens_in.value} tok"
 
 
 def _detail_text(entry: AuditEntry, body: dict[str, object] | None = None) -> str:

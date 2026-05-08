@@ -28,6 +28,7 @@ class SessionsPanel(Vertical):
     def update_sessions(self, sessions: list[Session], *, stale: bool = False) -> None:
         title = "SESSIONS (stale)" if stale else "SESSIONS"
         self.query_one(".panel-title", Static).update(title)
+        cursor_row = self.table.cursor_row
         self.table.clear()
         for session in sessions:
             ttl = _ttl(session.last_used_at, session.ttl_seconds)
@@ -41,6 +42,8 @@ class SessionsPanel(Vertical):
                 _truncate(session.purpose, 36),
                 key=session.session_id,
             )
+        if sessions and cursor_row is not None:
+            self.table.move_cursor(row=min(cursor_row, len(sessions) - 1), scroll=False)
 
 
 def _short(value: str) -> str:
