@@ -406,7 +406,7 @@ def create_mcp_server(bridge: AgentBridge) -> Any:
     """Create and register FastMCP tools."""
     if FastMCP is None:
         raise RuntimeError("fastmcp is not installed")
-    mcp = FastMCP("agent-bridge")
+    mcp = FastMCP("harnesstalk-bridge")
 
     @mcp.tool()
     async def list_targets() -> list[Target]:

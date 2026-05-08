@@ -1,4 +1,4 @@
-# Agent Bridge MCP
+# HarnessTalk-Bridge
 
 Local MCP server for inter-agent consultation across Hermes, OpenClaw,
 and the Claude API.

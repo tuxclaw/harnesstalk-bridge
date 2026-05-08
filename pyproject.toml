@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "agent-bridge-mcp"
+name = "harnesstalk-bridge"
 version = "0.1.0"
 description = "Local MCP bridge for inter-agent consultation"
 readme = "README.md"
@@ -22,7 +22,7 @@ dev = [
 ]
 
 [project.scripts]
-agent-bridge = "server:main"
+harnesstalk-bridge = "server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["adapters", "bridge"]
